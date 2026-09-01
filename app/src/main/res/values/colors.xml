@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mysms_primary">#4B4CBE</color>
+    <color name="mysms_background">#F8F9FC</color>
+    <color name="mysms_surface">#FFFFFF</color>
+    <color name="mysms_text">#1E2330</color>
+    <color name="mysms_secondary_text">#707789</color>
+    <color name="mysms_divider">#E4E6EE</color>
+</resources>
