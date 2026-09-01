@@ -5,11 +5,12 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.ContactsContract;
+import android.text.TextUtils;
 import android.provider.Telephony;
 import android.telephony.SmsManager;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,19 +25,25 @@ public final class SmsRepository {
 
     public void loadConversations(Callback<List<Conversation>> callback) {
         new Thread(() -> { try {
-            Map<Long, Conversation> result = new HashMap<>();
+            Map<Long, ConversationAccumulator> result = new LinkedHashMap<>();
             Uri uri = Telephony.Sms.CONTENT_URI;
             String[] projection = {Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.READ};
             try (Cursor cursor = resolver.query(uri, projection, null, null, Telephony.Sms.DATE + " DESC")) {
                 if (cursor != null) while (cursor.moveToNext()) {
-                    long thread = cursor.getLong(0); if (result.containsKey(thread)) continue;
-                    String address = cursor.getString(1); String preview = cursor.getString(2);
-                    String name = resolveName(address); String time = String.valueOf(cursor.getLong(3));
-                    boolean unread = cursor.getInt(4) == 0;
-                    result.put(thread, new Conversation(thread,address,name,preview,time,1,unread));
+                    if (cursor.isNull(0) || cursor.isNull(1) || cursor.isNull(3)) continue;
+                    long thread = cursor.getLong(0); String address = cursor.getString(1);
+                    String preview = cursor.isNull(2) ? "" : cursor.getString(2); long date = cursor.getLong(3);
+                    if (thread <= 0 || TextUtils.isEmpty(address) || date <= 0) continue;
+                    ConversationAccumulator item = result.get(thread);
+                    if (item == null) { item = new ConversationAccumulator(thread,address,resolveName(address)); result.put(thread,item); }
+                    item.count++; item.unread |= cursor.getInt(4) == 0;
+                    if (date >= item.date) { item.date=date; item.preview=preview; }
                 }
             }
-            callback.onSuccess(new ArrayList<>(result.values()));
+            List<Conversation> conversations = new ArrayList<>();
+            for (ConversationAccumulator item : result.values()) conversations.add(item.build());
+            conversations.sort((a,b) -> Long.compare(parseDate(b.time), parseDate(a.time)));
+            callback.onSuccess(conversations);
         } catch (Exception e) { callback.onError(e); } }).start();
     }
 
@@ -59,8 +66,19 @@ public final class SmsRepository {
     }
 
     private String resolveName(String phone) {
-        if(phone==null) return "Unknown sender";
-        try (Cursor c=resolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME},ContactsContract.CommonDataKinds.Phone.NUMBER+"=?",new String[]{phone},null)) { if(c!=null&&c.moveToFirst()) return c.getString(0); } catch(Exception ignored){}
+        if (TextUtils.isEmpty(phone)) return "Unknown sender";
+        try {
+            Uri lookup = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phone));
+            try (Cursor c = resolver.query(lookup, new String[]{ContactsContract.PhoneLookup.DISPLAY_NAME}, null, null, null)) {
+                if (c != null && c.moveToFirst() && !TextUtils.isEmpty(c.getString(0))) return c.getString(0);
+            }
+        } catch (Exception ignored) { }
         return phone;
+    }
+    private long parseDate(String raw) { try { return Long.parseLong(raw); } catch (Exception e) { return 0; } }
+    private static final class ConversationAccumulator {
+        final long thread; final String address,name; String preview=""; long date=0; int count=0; boolean unread=false;
+        ConversationAccumulator(long t,String a,String n){thread=t;address=a;name=n;}
+        Conversation build(){return new Conversation(thread,address,name,preview,String.valueOf(date),count,unread);}
     }
 }
