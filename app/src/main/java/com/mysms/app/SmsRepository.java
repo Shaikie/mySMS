@@ -8,6 +8,8 @@ import android.provider.ContactsContract;
 import android.text.TextUtils;
 import android.provider.Telephony;
 import android.telephony.SmsManager;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -20,8 +22,10 @@ public final class SmsRepository {
     public static final class Conversation { public final long threadId; public final String address,name,preview,time; public final int messageCount; public final boolean unread; public Conversation(long id,String a,String n,String p,String t,int c,boolean u){threadId=id;address=a;name=n;preview=p;time=t;messageCount=c;unread=u;} }
     public static final class Message { public final long id,threadId,date; public final String address,body; public final int type,status; public Message(long i,long t,long d,String a,String b,int ty,int s){id=i;threadId=t;date=d;address=a;body=b;type=ty;status=s;} public boolean isOutgoing(){return type==Telephony.Sms.MESSAGE_TYPE_SENT||type==Telephony.Sms.MESSAGE_TYPE_OUTBOX;} }
 
-    private final ContentResolver resolver;
-    public SmsRepository(Context context) { resolver=context.getApplicationContext().getContentResolver(); }
+    private final ContentResolver resolver; private final Context context;
+    public SmsRepository(Context context) { this.context=context.getApplicationContext(); resolver=this.context.getContentResolver(); }
+    public static final class SimOption { public final int subscriptionId,slot; public final String label; public SimOption(int id,int s,String l){subscriptionId=id;slot=s;label=l;} }
+    public List<SimOption> getActiveSubscriptions() { List<SimOption> out=new ArrayList<>(); try { List<SubscriptionInfo> infos=SubscriptionManager.from(context).getActiveSubscriptionInfoList(); if(infos!=null) for(SubscriptionInfo info:infos) out.add(new SimOption(info.getSubscriptionId(),info.getSimSlotIndex(),"SIM "+(info.getSimSlotIndex()+1))); } catch(Exception ignored){} if(out.isEmpty()) out.add(new SimOption(SubscriptionManager.getDefaultSmsSubscriptionId(),0,"SIM 1")); return out; }
 
     public void loadConversations(Callback<List<Conversation>> callback) {
         new Thread(() -> { try {
@@ -61,9 +65,8 @@ public final class SmsRepository {
     public void markThreadRead(long threadId) { try { resolver.update(Telephony.Sms.CONTENT_URI, valuesRead(), Telephony.Sms.THREAD_ID+"=?", new String[]{String.valueOf(threadId)}); } catch (Exception ignored) {} }
     private android.content.ContentValues valuesRead(){ android.content.ContentValues v=new android.content.ContentValues();v.put(Telephony.Sms.READ,1);return v; }
 
-    public void send(String destination, String body, Callback<Void> callback) {
-        new Thread(() -> { try { SmsManager.getDefault().sendTextMessage(destination,null,body,null,null); callback.onSuccess(null); } catch(Exception e){callback.onError(e);} }).start();
-    }
+    public void send(String destination, String body, Callback<Void> callback) { send(destination,body,SubscriptionManager.getDefaultSmsSubscriptionId(),callback); }
+    public void send(String destination, String body, int subscriptionId, Callback<Void> callback) { new Thread(() -> { try { SmsManager manager=SmsManager.getSmsManagerForSubscriptionId(subscriptionId); manager.sendTextMessage(destination,null,body,null,null); callback.onSuccess(null); } catch(Exception e){callback.onError(e);} }).start(); }
 
     private String resolveName(String phone) {
         if (TextUtils.isEmpty(phone)) return "Unknown sender";
