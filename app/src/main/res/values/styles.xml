@@ -3,7 +3,11 @@
 
     <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/mysms_primary</item>
+        <item name="android:navigationBarColor">@color/mysms_background</item>
+        <item name="android:statusBarColor">@color/mysms_background</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
     </style>
 
 </resources>
