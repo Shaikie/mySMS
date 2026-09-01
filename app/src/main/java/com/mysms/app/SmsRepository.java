@@ -24,8 +24,8 @@ public final class SmsRepository {
 
     private final ContentResolver resolver; private final Context context;
     public SmsRepository(Context context) { this.context=context.getApplicationContext(); resolver=this.context.getContentResolver(); }
-    public static final class SimOption { public final int subscriptionId,slot; public final String label; public SimOption(int id,int s,String l){subscriptionId=id;slot=s;label=l;} }
-    public List<SimOption> getActiveSubscriptions() { List<SimOption> out=new ArrayList<>(); try { List<SubscriptionInfo> infos=SubscriptionManager.from(context).getActiveSubscriptionInfoList(); if(infos!=null) for(SubscriptionInfo info:infos) out.add(new SimOption(info.getSubscriptionId(),info.getSimSlotIndex(),"SIM "+(info.getSimSlotIndex()+1))); } catch(Exception ignored){} if(out.isEmpty()) out.add(new SimOption(SubscriptionManager.getDefaultSmsSubscriptionId(),0,"SIM 1")); return out; }
+    public static final class SimOption { public final int subscriptionId,slot; public final String label,placeholder; public SimOption(int id,int s,String carrier){subscriptionId=id;slot=s;label="SIM "+(s+1)+(TextUtils.isEmpty(carrier)?"":" — "+carrier);placeholder=TextUtils.isEmpty(carrier)?"Text message":carrier+" • Text message";} }
+    public List<SimOption> getActiveSubscriptions() { List<SimOption> out=new ArrayList<>(); try { List<SubscriptionInfo> infos=SubscriptionManager.from(context).getActiveSubscriptionInfoList(); if(infos!=null) for(SubscriptionInfo info:infos){CharSequence name=info.getCarrierName();out.add(new SimOption(info.getSubscriptionId(),info.getSimSlotIndex(),name==null?null:name.toString()));} } catch(Exception ignored){} if(out.isEmpty()) out.add(new SimOption(SubscriptionManager.getDefaultSmsSubscriptionId(),0,null)); return out; }
 
     public void loadConversations(Callback<List<Conversation>> callback) {
         new Thread(() -> { try {
